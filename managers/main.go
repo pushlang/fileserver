@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -42,8 +43,17 @@ func main() {
 				}
 				if value, ok := pparams["filename"]; ok {
 					fmt.Println("name, filename:", pparams["name"], ", ", value)
-					fmt.Printf("slurp: %s", slurp)
-					writeFile("./"+value+".copy2", slurp)
+
+					path, err := os.Executable()
+					fmt.Println("path:", path)
+
+					if err != nil {
+						log.Fatal(err)
+					}
+
+					value2 := filepath.Dir(path) + "/" + filepath.Base(value) + "2"
+					fmt.Println("value2:", value2)
+					writeFile(value2, slurp)
 				}
 			}
 		}

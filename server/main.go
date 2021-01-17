@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -40,16 +41,22 @@ func main() {
 				}
 				if value, ok := pparams["filename"]; ok {
 					fmt.Println("name, filename:", pparams["name"], ", ", value)
-					writeFile(value+".copy", slurp)
+					path, err := os.Executable()
+					if err != nil {
+						log.Fatal(err)
+					}
+					value2 := filepath.Dir(path)+"/"+value+".copy"
+					fmt.Println("value2:", value2)
+					writeFile(value2, slurp)
 
 					client := &http.Client{}
 
 					//prepare the reader instances to encode
 					values := map[string]io.Reader{
-						pparams["name"]: mustOpen(value+".copy"), // lets assume its this file
+						pparams["name"]: mustOpen(value2), // lets assume its this file
 						"other":         strings.NewReader("some information"),
 					}
-					err := Upload(client, "http://127.0.0.1:8090", values)
+					err = Upload(client, "http://127.0.0.1:8090", values)
 					if err != nil {
 						panic(err)
 					}
@@ -76,12 +83,12 @@ func Upload(client *http.Client, url string, values map[string]io.Reader) (err e
 		// Add an image file
 		if x, ok := r.(*os.File); ok {
 			if fw, err = w.CreateFormFile(key, x.Name()); err != nil {
-				return
+				return err
 			}
 		} else {
 			// Add other fields
 			if fw, err = w.CreateFormField(key); err != nil {
-				return
+				return err
 			}
 		}
 		if _, err = io.Copy(fw, r); err != nil {
@@ -96,7 +103,7 @@ func Upload(client *http.Client, url string, values map[string]io.Reader) (err e
 	// Now that you have a form, you can submit it to your handler.
 	req, err := http.NewRequest("POST", url, &b)
 	if err != nil {
-		return
+		return err
 	}
 	// Don't forget to set the content type, this will contain the boundary.
 	req.Header.Set("Content-Type", w.FormDataContentType())
@@ -104,14 +111,14 @@ func Upload(client *http.Client, url string, values map[string]io.Reader) (err e
 	// Submit the request
 	res, err := client.Do(req)
 	if err != nil {
-		return
+		return err
 	}
 
 	// Check the response
 	if res.StatusCode != http.StatusOK {
 		err = fmt.Errorf("bad status: %s", res.Status)
 	}
-	return
+	return err
 }
 
 func mustOpen(f string) *os.File {
