@@ -14,49 +14,55 @@ import (
 	"strings"
 )
 
+func mustParseMT(r *http.Request, h string) (string, map[string]string) {
+	t, p, err := mime.ParseMediaType(r.Header.Get(h))
+	if err != nil {
+		panic(err)
+	}
+	return t, p
+}
+
+func pathExec(fn string, tl string) string {
+	fmt.Println("filename:", fileName)
+	p, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	return filepath.Dir(path) + "/" + fn + tl
+}
+
 func main() {
 	h1 := func(w http.ResponseWriter, req *http.Request) {
-		mediaType, params, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
-		if err != nil {
-			log.Fatal(err)
-		}
-		if strings.HasPrefix(mediaType, "multipart/") {
-			field := params["boundary"]
-			mr := multipart.NewReader(req.Body, field)
+		mtype, params := mustParseMT(req, "Content-Type")
+		if strings.HasPrefix(mtype, "multipart/") {
+			partId := params["boundary"]
+			mr := multipart.NewReader(req.Body, partId)
 			for {
-				p, err := mr.NextPart()
+				part, err := mr.NextPart()
 				if err == io.EOF {
 					return
 				}
 				if err != nil {
 					log.Fatal(err)
 				}
-				slurp, err := ioutil.ReadAll(p)
+				partData, err := ioutil.ReadAll(part)
 				if err != nil {
 					log.Fatal(err)
 				}
-				_, pparams, err := mime.ParseMediaType(p.Header.Get("Content-Disposition"))
-				if err != nil {
-					log.Fatal(err)
-				}
-				if value, ok := pparams["filename"]; ok {
-					fmt.Println("name, filename:", pparams["name"], ", ", value)
-					path, err := os.Executable()
-					if err != nil {
-						log.Fatal(err)
-					}
-					value2 := filepath.Dir(path)+"/"+value+".copy"
-					fmt.Println("value2:", value2)
-					writeFile(value2, slurp)
+				_, params = mustParseMT(part, "Content-Disposition")
 
-					client := &http.Client{}
+				if fileName, ok := params["filename"]; ok {
+					fullPath := pathExec(fileName, ".copy")
+					fmt.Println("fullPath:", fullPath)
+					writeFile(fullPath, partData)
 
 					//prepare the reader instances to encode
 					values := map[string]io.Reader{
-						pparams["name"]: mustOpen(value2), // lets assume its this file
-						"other":         strings.NewReader("some information"),
+						pparams["name"]: mustOpen(fullPath),
+						"username":      strings.NewReader("user01"),
 					}
-					err = Upload(client, "http://127.0.0.1:8090", values)
+					err = Upload(&http.Client{},
+						"http://127.0.0.1:8090", values)
 					if err != nil {
 						panic(err)
 					}
