@@ -5,93 +5,82 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-var manager = "http://127.0.0.1:8090"
+//var mgr = "http://127.0.0.1:8090"
+var mgr = ":8090"
 
 func HandlerServer(w http.ResponseWriter, req *http.Request) {
 	mtype, params := mustParseMT(req.Header.Get("Content-Type"))
 	if strings.HasPrefix(mtype, "multipart/") {
 		partId := params["boundary"]
 		mr := multipart.NewReader(req.Body, partId)
+		values := map[string]io.Reader{}
 		for {
 			part, err := mr.NextPart()
 			if err == io.EOF {
 				return
 			}
 			if err != nil {
-				log.Fatal(err)
+				panic(err)
 			}
 			partData, err := ioutil.ReadAll(part)
 			if err != nil {
-				log.Fatal(err)
+				panic(err)
 			}
 			_, params = mustParseMT(part.Header.Get("Content-Disposition"))
 
-			if fileName, ok := params["filename"]; ok {
-				fullPath := pathExec(fileName, ".copy")
-				writeFile(fullPath, partData)
-
-				values := map[string]io.Reader{
-					params["name"]: MustOpen(fullPath),
-					"username":     strings.NewReader("user01"),
-				}
-				err = UploadForm(manager, values)
-
-				if err != nil {
-					panic(err)
-				}
+			switch params["name"] {
+			case "file":
+				fullPath := writeFile(params["file"], partData)
+				values["file"] = MustOpen(fullPath)
+			case "username":
+				values["username"] = strings.NewReader(params["username"])
+			default:
+				panic("Header parameter hasn't recognized")
 			}
 		}
-
+		if err := UploadForm(mgr, values); err != nil {
+			panic(err)
+		}
 	}
 }
+
 func HandlerManager(w http.ResponseWriter, req *http.Request) {
-	mediaType, params, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	if strings.HasPrefix(mediaType, "multipart/") {
-		field := params["boundary"]
-		mr := multipart.NewReader(req.Body, field)
+	mtype, params := mustParseMT(req.Header.Get("Content-Type"))
+	if strings.HasPrefix(mtype, "multipart/") {
+		partId := params["boundary"]
+		mr := multipart.NewReader(req.Body, partId)
+		values := map[string]io.Reader{}
 		for {
-			p, err := mr.NextPart()
+			part, err := mr.NextPart()
 			if err == io.EOF {
 				return
 			}
 			if err != nil {
-				log.Fatal(err)
+				panic(err)
 			}
-			slurp, err := ioutil.ReadAll(p)
+			partData, err := ioutil.ReadAll(part)
 			if err != nil {
-				log.Fatal(err)
+				panic(err)
 			}
+			_, params = mustParseMT(part.Header.Get("Content-Disposition"))
 
-			_, pparams, err := mime.ParseMediaType(p.Header.Get("Content-Disposition"))
-
-			if err != nil {
-				log.Fatal(err)
-			}
-			if value, ok := pparams["filename"]; ok {
-				fmt.Println("name, filename:", pparams["name"], ", ", value)
-
-				path, err := os.Executable()
-				fmt.Println("path:", path)
-
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				value2 := filepath.Dir(path) + "/" + filepath.Base(value) + "2"
-				fmt.Println("value2:", value2)
-				writeFile(value2, slurp)
+			switch params["name"] {
+			case "file":
+				fullPath := writeFile(params["file"], partData)
+				values["file"] = MustOpen(fullPath)
+			case "username":
+				values["username"] = strings.NewReader(params["username"])
+			default:
+				panic("Header parameter hasn't recognized")
 			}
 		}
 	}
@@ -138,6 +127,8 @@ func postForm(url string, b bytes.Buffer, w *multipart.Writer) (err error) {
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
 
+	printRequest(req)
+
 	res, err := c.Do(req)
 	if err != nil {
 		return
@@ -156,18 +147,6 @@ func mustParseMT(h string) (string, map[string]string) {
 	return t, p
 }
 
-func pathExec(fn string, tl string) string {
-	fmt.Println("file name:", fn)
-	p, err := os.Executable()
-	if err != nil {
-		panic(err)
-	}
-	fp := filepath.Dir(p) + "/" + fn + tl
-
-	fmt.Println("full path:", fp)
-	return fp
-}
-
 func MustOpen(f string) *os.File {
 	r, err := os.Open(f)
 	if err != nil {
@@ -176,8 +155,10 @@ func MustOpen(f string) *os.File {
 	return r
 }
 
-func writeFile(n string, d []byte) {
-	fd, err := os.Create(n)
+func writeFile(n string, d []byte) string {
+	fmt.Println("file name (writefile):", n)
+	fp := pathExec(n)
+	fd, err := os.Create(fp)
 	if err != nil {
 		panic(err)
 	}
@@ -188,4 +169,25 @@ func writeFile(n string, d []byte) {
 	}
 
 	fd.Close()
+	return fp
+}
+
+func pathExec(n string) string {
+	fmt.Println("file name:", n)
+	p, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	fp := filepath.Dir(p) + "/" + n
+
+	fmt.Println("full path:", fp)
+	return fp
+}
+
+func printRequest(r *http.Request) {
+	b, err := httputil.DumpRequest(r, true)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%s\n", b)
 }

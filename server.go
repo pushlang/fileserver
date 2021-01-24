@@ -6,6 +6,7 @@ import (
 	"net/http"
 )
 
+//var srv = "http://127.0.0.1:8080"
 var srv = ":8080"
 
 func RunServer() {

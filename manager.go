@@ -6,6 +6,7 @@ import (
 	"net/http"
 )
 
+//var mgr = "http://127.0.0.1:8090"
 var mgr = ":8090"
 
 func RunManager() {
