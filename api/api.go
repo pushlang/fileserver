@@ -14,10 +14,10 @@ import (
 	"strings"
 )
 
-//var mgr = "http://127.0.0.1:8090"
-var mgr = ":8090"
+var mgr = "http://127.0.0.1:8090"
 
 func HandlerServer(w http.ResponseWriter, req *http.Request) {
+	fmt.Println("enter:HandlerServer")
 	mtype, params := mustParseMT(req.Header.Get("Content-Type"))
 	if strings.HasPrefix(mtype, "multipart/") {
 		partId := params["boundary"]
@@ -26,7 +26,7 @@ func HandlerServer(w http.ResponseWriter, req *http.Request) {
 		for {
 			part, err := mr.NextPart()
 			if err == io.EOF {
-				return
+				break
 			}
 			if err != nil {
 				panic(err)
@@ -39,10 +39,10 @@ func HandlerServer(w http.ResponseWriter, req *http.Request) {
 
 			switch params["name"] {
 			case "file":
-				fullPath := writeFile(params["file"], partData)
+				fullPath := writeFile(params["filename"]+".bak", partData)
 				values["file"] = MustOpen(fullPath)
 			case "username":
-				values["username"] = strings.NewReader(params["username"])
+				values["username"] = bytes.NewReader(partData)
 			default:
 				panic("Header parameter hasn't recognized")
 			}
@@ -54,15 +54,15 @@ func HandlerServer(w http.ResponseWriter, req *http.Request) {
 }
 
 func HandlerManager(w http.ResponseWriter, req *http.Request) {
+	fmt.Println("enter:HandlerManager")
 	mtype, params := mustParseMT(req.Header.Get("Content-Type"))
 	if strings.HasPrefix(mtype, "multipart/") {
 		partId := params["boundary"]
 		mr := multipart.NewReader(req.Body, partId)
-		values := map[string]io.Reader{}
 		for {
 			part, err := mr.NextPart()
 			if err == io.EOF {
-				return
+				break
 			}
 			if err != nil {
 				panic(err)
@@ -75,10 +75,10 @@ func HandlerManager(w http.ResponseWriter, req *http.Request) {
 
 			switch params["name"] {
 			case "file":
-				fullPath := writeFile(params["file"], partData)
-				values["file"] = MustOpen(fullPath)
+				fullPath := writeFile(params["filename"], partData)
+				fmt.Println(fullPath)
 			case "username":
-				values["username"] = strings.NewReader(params["username"])
+				fmt.Printf("%s\n", partData)
 			default:
 				panic("Header parameter hasn't recognized")
 			}
@@ -87,12 +87,14 @@ func HandlerManager(w http.ResponseWriter, req *http.Request) {
 }
 
 func UploadForm(url string, values map[string]io.Reader) (err error) {
+	fmt.Println("enter:UploadForm")
 	b, w, err := createForm(values)
 	err = postForm(url, b, w)
 	return
 }
 
 func createForm(values map[string]io.Reader) (bytes.Buffer, *multipart.Writer, error) {
+	fmt.Println("enter:createForm")
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
 	var err error
@@ -120,6 +122,7 @@ func createForm(values map[string]io.Reader) (bytes.Buffer, *multipart.Writer, e
 }
 
 func postForm(url string, b bytes.Buffer, w *multipart.Writer) (err error) {
+	fmt.Println("enter:postForm")
 	c := &http.Client{}
 	req, err := http.NewRequest("POST", url, &b)
 	if err != nil {
@@ -156,7 +159,7 @@ func MustOpen(f string) *os.File {
 }
 
 func writeFile(n string, d []byte) string {
-	fmt.Println("file name (writefile):", n)
+	fmt.Println("enter:writeFile")
 	fp := pathExec(n)
 	fd, err := os.Create(fp)
 	if err != nil {
@@ -178,7 +181,7 @@ func pathExec(n string) string {
 	if err != nil {
 		panic(err)
 	}
-	fp := filepath.Dir(p) + "/" + n
+	fp := filepath.Dir(p) + "/" + filepath.Base(n)
 
 	fmt.Println("full path:", fp)
 	return fp

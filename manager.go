@@ -7,9 +7,9 @@ import (
 )
 
 //var mgr = "http://127.0.0.1:8090"
-var mgr = ":8090"
+var httpmgr = "127.0.0.1:8090"
 
 func RunManager() {
 	http.HandleFunc("/", api.HandlerManager)
-	log.Fatal(http.ListenAndServe(mgr, nil))
+	log.Fatal(http.ListenAndServe(httpmgr, nil))
 }
